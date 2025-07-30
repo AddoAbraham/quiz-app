@@ -1,11 +1,20 @@
 import { useState } from "react";
-import QuizSettings from "./components/QuizSettings";
+import QuizSettings from "./components/QuizSettings"; // renamed SettingsForm
+import SettingsForm from "./components/SettingsForm";
 import Quiz from "./components/Quiz";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 
 function App() {
   const [settings, setSettings] = useState(null);
+
+  const startQuiz = (selectedSettings) => {
+    setSettings(selectedSettings);
+  };
+
+  const restartQuiz = () => {
+    setSettings(null); // Back to settings form
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -23,9 +32,9 @@ function App() {
       </h1>
 
       {!settings ? (
-        <QuizSettings startQuiz={setSettings} />
+        <QuizSettings startQuiz={startQuiz} />
       ) : (
-        <Quiz settings={settings} restartQuiz={() => setSettings(null)} />
+        <Quiz settings={settings} restartQuiz={restartQuiz} />
       )}
     </div>
   );
