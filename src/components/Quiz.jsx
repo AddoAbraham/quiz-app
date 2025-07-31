@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import he from "he";
 
 const playSound = (src) => {
   const sound = new Audio(src);
-  sound.play();
+  sound.play().catch((err) => console.warn("Sound play failed:", err));
 };
 
-const Quiz = ({ settings, restartQuiz }) => {
+const shuffle = (array) => {
+  return array.sort(() => Math.random() - 0.5);
+};
+
+const Quiz = ({ restartQuiz }) => {
   const [questions, setQuestions] = useState([]);
   const [index, setIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -21,231 +25,206 @@ const Quiz = ({ settings, restartQuiz }) => {
     return saved ? JSON.parse(saved) : 0;
   });
   const [newHighScore, setNewHighScore] = useState(false);
+  const [error, setError] = useState(null);
 
-  const { amount, category, difficulty } = settings;
+  const amount = 10;
+  const category = "";
+  const difficulty = "";
 
   useEffect(() => {
     const fetchQuestions = async () => {
-      setLoading(true);
-      let url = `https://opentdb.com/api.php?amount=${amount}&type=multiple`;
-      if (category) url += `&category=${category}`;
-      if (difficulty) url += `&difficulty=${difficulty}`;
-
       try {
-        const response = await fetch(url);
-        const data = await response.json();
-        setQuestions(data.results);
-      } catch (error) {
-        console.error("Failed to fetch questions", error);
-      } finally {
+        setLoading(true);
+        setError(null);
+
+        let apiUrl = `https://opentdb.com/api.php?amount=${amount}`;
+        if (category) apiUrl += `&category=${category}`;
+        if (difficulty) apiUrl += `&difficulty=${difficulty}`;
+        apiUrl += `&type=multiple`;
+
+        const res = await fetch(apiUrl);
+        const data = await res.json();
+
+        if (data.response_code !== 0 || !data.results.length) {
+          setError("No questions found.");
+          setLoading(false);
+          return;
+        }
+
+        const formattedQuestions = data.results.map((q) => ({
+          question: q.question,
+          correct: q.correct_answer,
+          answers: shuffle([q.correct_answer, ...q.incorrect_answers]),
+        }));
+
+        setQuestions(formattedQuestions);
+        setLoading(false);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load questions. Please try again.");
         setLoading(false);
       }
     };
 
     fetchQuestions();
-  }, [amount, category, difficulty]);
+  }, []);
 
   useEffect(() => {
-    if (selected || index === -1) return;
-    if (timeLeft === 0) {
-      playSound("/sounds/timeout.mp3");
-      handleAnswer(null);
-      return;
-    }
-
+    if (selected || reviewMode || loading || error) return;
     const timer = setTimeout(() => {
-      setTimeLeft((prev) => prev - 1);
+      setTimeLeft((prev) => {
+        if (prev === 1) {
+          handleAnswer(null);
+          return 15;
+        }
+        return prev - 1;
+      });
     }, 1000);
-
     return () => clearTimeout(timer);
-  }, [timeLeft, selected, index]);
-
-  useEffect(() => {
-    if (index === -1 && questions.length > 0) {
-      if (score > highScore) {
-        setHighScore(score);
-        localStorage.setItem("highScore", JSON.stringify(score));
-        setNewHighScore(true);
-      }
-      playSound("/sounds/completed.mp3");
-    }
-  }, [index, score, highScore, questions.length]);
-
-  const current = questions[index];
-  const allAnswers = current
-    ? [...current.incorrect_answers, current.correct_answer].sort(
-        () => Math.random() - 0.5
-      )
-    : [];
+  }, [selected, reviewMode, loading, error, timeLeft]);
 
   const handleAnswer = (answer) => {
-    setSelected(answer);
-    const isCorrect = answer === current?.correct_answer;
+    if (!questions[index] || selected !== null) return;
+
+    const current = questions[index];
+    const isCorrect = answer === current.correct;
+
     if (isCorrect) {
       setScore((prev) => prev + 1);
       playSound("/sounds/correct.mp3");
-    } else if (answer !== null) {
+    } else {
       playSound("/sounds/wrong.mp3");
     }
 
     setAnswerHistory((prev) => [
       ...prev,
       {
-        question: current?.question,
+        question: current.question,
+        correct: current.correct,
         selected: answer,
-        correct: current?.correct_answer,
+        answers: current.answers,
       },
     ]);
+    setSelected(answer);
 
     setTimeout(() => {
+      setSelected(null);
+      setTimeLeft(15);
       if (index + 1 < questions.length) {
-        setIndex((prev) => prev + 1);
-        setSelected(null);
-        setTimeLeft(15);
+        setIndex((i) => i + 1);
       } else {
-        setIndex(-1);
+        setReviewMode(true);
+        const finalScore = score + (isCorrect ? 1 : 0);
+        if (finalScore > highScore) {
+          setHighScore(finalScore);
+          setNewHighScore(true);
+          localStorage.setItem("highScore", JSON.stringify(finalScore));
+        }
+        playSound("/sounds/completed.mp3");
       }
     }, 1000);
   };
 
-  const showReview = () => setReviewMode(true);
+  const handleRestart = () => restartQuiz();
 
-  if (loading)
-    return <p className="text-center text-lg">Loading questions...</p>;
+  if (loading) return <p className="text-center text-lg">Loading quiz...</p>;
+
+  if (error) {
+    return (
+      <div className="text-center text-red-600">
+        <p>{error}</p>
+        <button
+          onClick={handleRestart}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   if (reviewMode) {
     return (
-      <motion.div
-        className="max-w-2xl mx-auto space-y-4 p-4"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
-      >
-        <h2 className="text-2xl font-bold text-center">Review Your Answers</h2>
-        {answerHistory.map((entry, i) => (
-          <div key={i} className="border p-4 rounded bg-white shadow">
-            <p className="font-semibold">{he.decode(entry.question)}</p>
-            <p className="mt-2">
-              <span className="font-medium">Your Answer:</span>{" "}
-              <span
-                className={
-                  entry.selected === entry.correct
-                    ? "text-green-600"
-                    : "text-red-600"
-                }
-              >
-                {entry.selected ? he.decode(entry.selected) : "No answer"}
-              </span>
-            </p>
-            {entry.selected !== entry.correct && (
-              <p>
-                <span className="font-medium">Correct Answer:</span>{" "}
-                <span className="text-green-700">
-                  {he.decode(entry.correct)}
-                </span>
-              </p>
-            )}
-          </div>
-        ))}
-        <div className="text-center">
-          <button
-            onClick={restartQuiz}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Restart Quiz
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (index === -1) {
-    return (
-      <motion.div
-        className="text-center space-y-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <h2 className="text-2xl font-bold text-green-600">Quiz Complete!</h2>
-        <p className="text-lg">
-          You scored <strong>{score}</strong> out of{" "}
-          <strong>{questions.length}</strong>
+      <div className="max-w-2xl mx-auto bg-white p-6 rounded shadow">
+        <h2 className="text-2xl font-bold mb-4 text-center">Quiz Finished!</h2>
+        <p className="text-center mb-4">
+          Score:{" "}
+          <strong>
+            {score} / {questions.length}
+          </strong>
         </p>
-        {newHighScore ? (
-          <p className="text-green-600 font-semibold text-lg">
+        {newHighScore && (
+          <p className="text-green-600 text-center font-semibold mb-4">
             🎉 New High Score!
           </p>
-        ) : (
-          <p className="text-gray-600">
-            Best Score: <strong>{highScore}</strong>
-          </p>
         )}
-        <div className="space-x-3">
+        <ul className="space-y-4">
+          {answerHistory.map((item, i) => (
+            <li key={i} className="border p-4 rounded">
+              <div className="font-semibold mb-2">
+                Q{i + 1}: {he.decode(item.question)}
+              </div>
+              {item.answers.map((a, idx) => (
+                <div
+                  key={idx}
+                  className={`px-2 py-1 rounded ${
+                    a === item.correct
+                      ? "bg-green-200"
+                      : a === item.selected
+                      ? "bg-red-200"
+                      : ""
+                  }`}
+                >
+                  {he.decode(a)}
+                </div>
+              ))}
+            </li>
+          ))}
+        </ul>
+        <div className="text-center mt-6">
           <button
-            onClick={restartQuiz}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
+            onClick={handleRestart}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
           >
             Restart Quiz
           </button>
-          <button
-            onClick={showReview}
-            className="bg-gray-700 text-white px-4 py-2 rounded"
-          >
-            Review Answers
-          </button>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
+  const current = questions[index];
+
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={index}
-        initial={{ opacity: 0, x: 50 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -50 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-6 max-w-xl mx-auto p-4"
-      >
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800">
-            Question {index + 1} of {questions.length}
-          </h2>
-          <p className="text-sm text-gray-600 font-semibold">Score: {score}</p>
-        </div>
-
-        <p className="text-lg font-medium">{he.decode(current.question)}</p>
-
-        <div className="text-right text-sm text-red-500 font-semibold">
-          Time Left: <span>{timeLeft}s</span>
-        </div>
-
-        <div className="grid gap-3">
-          {allAnswers.map((answer, i) => (
-            <motion.button
-              key={i}
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.05 }}
-              onClick={() => handleAnswer(answer)}
-              disabled={selected}
-              className={`p-3 rounded border transition-all duration-200 ${
-                selected
-                  ? answer === current.correct_answer
-                    ? "bg-green-500 text-white"
-                    : answer === selected
-                    ? "bg-red-500 text-white"
-                    : "bg-gray-200"
-                  : "bg-white hover:bg-blue-100"
-              }`}
-            >
-              {he.decode(answer)}
-            </motion.button>
-          ))}
-        </div>
-      </motion.div>
-    </AnimatePresence>
+    <div className="max-w-2xl mx-auto bg-white p-6 rounded shadow">
+      <div className="flex justify-between items-center mb-4">
+        <span>
+          Question {index + 1} / {questions.length}
+        </span>
+        <span className="text-red-600 font-bold">Time Left: {timeLeft}s</span>
+      </div>
+      <h2 className="text-lg font-semibold mb-4">
+        {he.decode(current.question)}
+      </h2>
+      <div className="space-y-2">
+        {current.answers.map((a, i) => (
+          <button
+            key={i}
+            onClick={() => handleAnswer(a)}
+            className={`block w-full text-left px-4 py-2 border rounded ${
+              selected === a
+                ? a === current.correct
+                  ? "bg-green-200"
+                  : "bg-red-200"
+                : "hover:bg-gray-100"
+            }`}
+            disabled={selected !== null}
+          >
+            {he.decode(a)}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 };
 
