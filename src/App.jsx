@@ -3,8 +3,7 @@ import QuizSettings from "./components/QuizSettings"; // renamed SettingsForm
 import SettingsForm from "./components/SettingsForm";
 import Quiz from "./components/Quiz";
 import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
-
+import viteLogo from "./assets/vite.svg";
 // Optional: Add framer-motion animation (if used in child components)
 // import { motion, AnimatePresence } from "framer-motion";
 
