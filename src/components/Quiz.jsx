@@ -2,11 +2,6 @@ import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import he from "he";
 
-const playSound = (src) => {
-  const sound = new Audio(src);
-  sound.play().catch((err) => console.warn("Sound play failed:", err));
-};
-
 const shuffle = (array) => {
   return array.sort(() => Math.random() - 0.5);
 };
@@ -91,9 +86,9 @@ const Quiz = ({ restartQuiz }) => {
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
-      playSound("/sounds/correct.mp3");
+      // sound removed
     } else {
-      playSound("/sounds/wrong.mp3");
+      // sound removed
     }
 
     setAnswerHistory((prev) => [
@@ -120,7 +115,7 @@ const Quiz = ({ restartQuiz }) => {
           setNewHighScore(true);
           localStorage.setItem("highScore", JSON.stringify(finalScore));
         }
-        playSound("/sounds/completed.mp3");
+        // sound removed
       }
     }, 1000);
   };
