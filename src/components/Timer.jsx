@@ -6,12 +6,12 @@ const Timer = ({ duration, onTimeUp, isRunning, keyReset }) => {
   useEffect(() => {
     if (!isRunning) return;
 
-    setTimeLeft(duration); // reset time on key change (like next question)
+    setTimeLeft(duration);
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev === 1) {
           clearInterval(interval);
-          onTimeUp(); // notify parent
+          onTimeUp();
           return 0;
         }
         return prev - 1;

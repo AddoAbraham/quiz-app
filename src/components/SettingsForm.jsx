@@ -10,7 +10,7 @@ function App() {
   };
 
   const restartQuiz = () => {
-    setSettings(null); // Back to settings form
+    setSettings(null);
   };
 
   return (

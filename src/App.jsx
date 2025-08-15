@@ -1,11 +1,9 @@
 import { useState } from "react";
-import QuizSettings from "./components/QuizSettings"; // renamed SettingsForm
+import QuizSettings from "./components/QuizSettings";
 import SettingsForm from "./components/SettingsForm";
 import Quiz from "./components/Quiz";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "./assets/vite.svg";
-// Optional: Add framer-motion animation (if used in child components)
-// import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
   const [settings, setSettings] = useState(null);
@@ -15,7 +13,7 @@ function App() {
   };
 
   const restartQuiz = () => {
-    setSettings(null); // Back to settings form
+    setSettings(null);
   };
 
   return (
@@ -33,7 +31,6 @@ function App() {
         Quiz App
       </h1>
 
-      {/* Responsive container for the form or quiz */}
       <div className="w-full max-w-2xl px-2 sm:px-4">
         {!settings ? (
           <QuizSettings startQuiz={startQuiz} />

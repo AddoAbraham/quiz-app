@@ -86,9 +86,6 @@ const Quiz = ({ restartQuiz }) => {
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
-      // sound removed
-    } else {
-      // sound removed
     }
 
     setAnswerHistory((prev) => [
@@ -115,7 +112,6 @@ const Quiz = ({ restartQuiz }) => {
           setNewHighScore(true);
           localStorage.setItem("highScore", JSON.stringify(finalScore));
         }
-        // sound removed
       }
     }, 1000);
   };

@@ -44,7 +44,6 @@ const QuizSettings = ({ startQuiz }) => {
           <option value="18">Science: Computers</option>
           <option value="21">Sports</option>
           <option value="23">History</option>
-          {/* Add more categories if needed */}
         </select>
       </div>
 
