@@ -1,12 +1,15 @@
+// src/components/Quiz.jsx
 import { useEffect, useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import he from "he";
 
-const shuffle = (array) => {
-  return array.sort(() => Math.random() - 0.5);
-};
+const shuffle = (array) => array.slice().sort(() => Math.random() - 0.5);
 
-const Quiz = ({ restartQuiz }) => {
+export default function Quiz({
+  restartQuiz,
+  amount = 10,
+  category = "any",
+  difficulty = "any",
+}) {
   const [questions, setQuestions] = useState([]);
   const [index, setIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -22,53 +25,86 @@ const Quiz = ({ restartQuiz }) => {
   const [newHighScore, setNewHighScore] = useState(false);
   const [error, setError] = useState(null);
 
-  const amount = 10;
-  const category = "";
-  const difficulty = "";
+  const explainResponse = (code) => {
+    switch (code) {
+      case 0:
+        return null;
+      case 1:
+        return "Not enough questions for these settings. Try lowering the amount or changing filters.";
+      case 2:
+        return "Invalid parameter(s). Double-check category/difficulty.";
+      case 3:
+        return "Token not found (not used here). Try again.";
+      case 4:
+        return "All questions for this session are exhausted. Try different filters.";
+      default:
+        return "Unexpected API response. Try again.";
+    }
+  };
+
+  const buildUrl = () => {
+    let apiUrl = `https://opentdb.com/api.php?amount=${Number(amount) || 10}`;
+
+    if (category && category !== "any") apiUrl += `&category=${category}`;
+    if (difficulty && difficulty !== "any")
+      apiUrl += `&difficulty=${difficulty}`;
+    apiUrl += `&type=multiple`;
+    return apiUrl;
+  };
+
+  const fetchQuestions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const apiUrl = buildUrl();
+      const res = await fetch(apiUrl);
+      const data = await res.json();
+
+      const respMsg = explainResponse(data?.response_code);
+      if (
+        respMsg ||
+        !Array.isArray(data?.results) ||
+        data.results.length === 0
+      ) {
+        setQuestions([]);
+        setError(respMsg || "No questions found. Try different settings.");
+        return;
+      }
+
+      const formatted = data.results.map((q) => ({
+        question: q.question,
+        correct: q.correct_answer,
+        answers: shuffle([q.correct_answer, ...q.incorrect_answers]),
+      }));
+
+      setQuestions(formatted);
+      setIndex(0);
+      setScore(0);
+      setSelected(null);
+      setReviewMode(false);
+      setAnswerHistory([]);
+      setTimeLeft(15);
+      setNewHighScore(false);
+    } catch (err) {
+      console.error(err);
+      setError(
+        "Failed to load questions. Please check your internet and try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchQuestions = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        let apiUrl = `https://opentdb.com/api.php?amount=${amount}`;
-        if (category) apiUrl += `&category=${category}`;
-        if (difficulty) apiUrl += `&difficulty=${difficulty}`;
-        apiUrl += `&type=multiple`;
-
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-
-        if (data.response_code !== 0 || !data.results.length) {
-          setError("No questions found.");
-          setLoading(false);
-          return;
-        }
-
-        const formattedQuestions = data.results.map((q) => ({
-          question: q.question,
-          correct: q.correct_answer,
-          answers: shuffle([q.correct_answer, ...q.incorrect_answers]),
-        }));
-
-        setQuestions(formattedQuestions);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load questions. Please try again.");
-        setLoading(false);
-      }
-    };
-
     fetchQuestions();
-  }, []);
+  }, [amount, category, difficulty]);
 
   useEffect(() => {
     if (selected || reviewMode || loading || error) return;
     const timer = setTimeout(() => {
       setTimeLeft((prev) => {
-        if (prev === 1) {
+        if (prev <= 1) {
           handleAnswer(null);
           return 15;
         }
@@ -97,6 +133,7 @@ const Quiz = ({ restartQuiz }) => {
         answers: current.answers,
       },
     ]);
+
     setSelected(answer);
 
     setTimeout(() => {
@@ -105,28 +142,30 @@ const Quiz = ({ restartQuiz }) => {
       if (index + 1 < questions.length) {
         setIndex((i) => i + 1);
       } else {
-        setReviewMode(true);
         const finalScore = score + (isCorrect ? 1 : 0);
+        setReviewMode(true);
         if (finalScore > highScore) {
           setHighScore(finalScore);
           setNewHighScore(true);
           localStorage.setItem("highScore", JSON.stringify(finalScore));
         }
       }
-    }, 1000);
+    }, 750);
   };
 
-  const handleRestart = () => restartQuiz();
+  const handleRestart = () => {
+    fetchQuestions();
+  };
 
   if (loading) return <p className="text-center text-lg">Loading quiz...</p>;
 
   if (error) {
     return (
       <div className="text-center text-red-600">
-        <p>{error}</p>
+        <p className="mb-3">{error}</p>
         <button
           onClick={handleRestart}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+          className="mt-1 px-4 py-2 bg-blue-600 text-white rounded"
         >
           Try Again
         </button>
@@ -185,6 +224,19 @@ const Quiz = ({ restartQuiz }) => {
   }
 
   const current = questions[index];
+  if (!current) {
+    return (
+      <div className="text-center">
+        <p>No question to show. Reloading…</p>
+        <button
+          onClick={fetchQuestions}
+          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Reload
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto bg-white p-6 rounded shadow">
@@ -194,9 +246,11 @@ const Quiz = ({ restartQuiz }) => {
         </span>
         <span className="text-red-600 font-bold">Time Left: {timeLeft}s</span>
       </div>
+
       <h2 className="text-lg font-semibold mb-4">
         {he.decode(current.question)}
       </h2>
+
       <div className="space-y-2">
         {current.answers.map((a, i) => (
           <button
@@ -217,6 +271,4 @@ const Quiz = ({ restartQuiz }) => {
       </div>
     </div>
   );
-};
-
-export default Quiz;
+}
